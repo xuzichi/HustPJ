@@ -12,35 +12,38 @@ login = 'https://pass.hust.edu.cn/cas/login?service=http%3A%2F%2Fcurriculum.hust
 
 # 使用会话保持 cookie
 s = requests.Session()
-
-# 首次请求，获取隐藏参数
+# 获取隐藏参数
 start_response = s.get(login)
 start_html = etree.HTML(start_response.text, parser=etree.HTMLParser())
-lt = start_html.xpath('//*[@id="fm1"]/input[6]/@value')[0]
-execution = start_html.xpath('//*[@id="fm1"]/input[7]/@value')[0]
-_eventId = start_html.xpath('//*[@id="fm1"]/input[8]/@value')[0]
+lt = start_html.xpath('//*[@id="loginForm"]/input[4]/@value')[0]
+execution = start_html.xpath('//*[@id="loginForm"]/input[5]/@value')[0]
+_eventId = start_html.xpath('//*[@id="loginForm"]/input[6]/@value')[0]
+ul = len(username)
+pl = len(password)
 # 调用 JavaScript 对密码加密
-with open('login.js', 'r') as f:
+with open('des.js', 'r') as f:
     js_login = f.read()
 
 ctx = execjs.compile(js_login)
-username_result = ctx.call('encryptedString', username)
-password_result = ctx.call('encryptedString', password)
-print(username_result)
-print(password_result)
-
-# 登录
+rsa = ctx.call('login', username, password, lt)
+# 登陆
 data = {
-    'username': username_result,
-    'password': password_result,
+    'rsa': rsa,
+    'ul': ul,
+    'pl': pl,
     'lt': lt,
     'execution': execution,
     '_eventId': _eventId,
 }
 login_response = s.post(login, data=data)  # 重定向请求必须加上 allow_redirects=False
 
+'''
+上面是登陆过程，下面进行评教
+'''
+
 url = 'http://curriculum.hust.edu.cn/cc_HustWspjTeacherAction.do'
 for page in [1, 2, 3]:
+
     # 进入评教主界面获取课程代码kcdm、老师人数size以及初始的jsid（根据num改变的，初始的便是num=0时的）
     data_1 = {
         'hidOption': 'getWspjPjlc',
@@ -63,6 +66,7 @@ for page in [1, 2, 3]:
     for result_i in result:
         if re.match('^gotoKcpj\(\'\',\'(\w*)', result_i) is None:
             if re.match('^gotoWspj\(\'\',\'(\w*)', result_i) is None:
+                print(1)
                 pass
             else:
                 kcdm.append(re.match('^gotoWspj\(\'\',\'(\w*)', result_i).group(1))
@@ -83,6 +87,7 @@ for page in [1, 2, 3]:
             'num': '0',
         }
         response = s.get(url_size, params=querystring)
+        print(response.text)
         page = html.fromstring(response.text)
         size = page.xpath('//input[@name="size"]/@value')
         size = int(size[0])
@@ -121,6 +126,6 @@ for page in [1, 2, 3]:
                 'yp_flag': '0',
             }
             response = s.post(url_submit, data=data)
-            print(response.text)
             print(kcdm_i + '课程的第' + str(num) + '老师已完成')
         print(kcdm_i + '课程已完成')
+
